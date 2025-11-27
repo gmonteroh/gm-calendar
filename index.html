@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GM Calendar</title>
+  <meta name="description" content="Mini PWA para agendar eventos rápido en Outlook/Teams.">
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0078d4">
+
+  <!-- iPhone -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon.png">
+
+  <style>
+    body { font-family: Arial; background: #f3f6fb; margin: 0; padding: 16px; }
+    .card { max-width: 600px; margin: auto; background: white; padding: 16px; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.1); }
+    textarea { width: 100%; height: 100px; margin-top: 10px; font-size: 16px; padding: 10px; border-radius: 8px; border: 1px solid #ccc; }
+    button { padding: 12px; margin-top: 10px; width: 48%; border: none; border-radius: 8px; background: #0078d4; color: white; font-weight: bold; }
+    .row { display: flex; justify-content: space-between; gap: 4%; }
+    .result { background: #eef5ff; padding: 12px; margin-top: 10px; border-radius: 8px; display: none; }
+
+    /* Mensaje flotante para dictado */
+    #dict-float {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #0078d4;
+      color: white;
+      padding: 14px 18px;
+      border-radius: 10px;
+      font-size: 16px;
+      display: none;
+      z-index: 9999;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <h2>GM Calendar</h2>
+    <p>Escribe algo como: <b>"mañana 15:00 reunión"</b> o <b>"28/11 9:30 proveedor"</b>.</p>
+
+    <textarea id="input" placeholder="Escribe aquí..."></textarea>
+
+    <div class="row">
+      <button id="dictBtn">🎤 Dictar</button>
+      <button id="parseBtn">🔎 Procesar</button>
+    </div>
+
+    <div class="row">
+      <button id="outlookBtn">📧 Outlook</button>
+      <button id="icsBtn">⬇️ .ics</button>
+    </div>
+
+    <div id="result" class="result"></div>
+  </div>
+
+  <div id="dict-float">Dictando… toca “Listo” cuando termines</div>
+
+
+<script>
+/* ================================
+   PARSER ORIGINAL
+   ================================ */
+function parseSpanishDate(text) {
+  text = text.toLowerCase();
+  const now = new Date();
+
+  if (text.includes("mañana")) {
+    const match = text.match(/(\d{1,2}):(\d{2})/);
+    if (match) {
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1,
+        parseInt(match[1]), parseInt(match[2]));
+    }
+  }
+
+  if (text.includes("hoy")) {
+    const match = text.match(/(\d{1,2}):(\d{2})/);
+    if (match) {
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate(),
+        parseInt(match[1]), parseInt(match[2]));
+    }
+  }
+
+  const full = text.match(/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})/);
+  if (full) {
+    return new Date(now.getFullYear(), full[2] - 1, full[1],
+      full[3], full[4]);
+  }
+
+  return null;
+}
+
+function formatICSDate(d) {
+  return d.getFullYear().toString() +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    String(d.getDate()).padStart(2, "0") + "T" +
+    String(d.getHours()).padStart(2, "0") +
+    String(d.getMinutes()).padStart(2, "0") +
+    "00";
+}
+
+/* ================================
+   PROCESAR
+   ================================ */
+document.getElementById("parseBtn").onclick = () => {
+  const txt = document.getElementById("input").value;
+  const date = parseSpanishDate(txt);
+
+  const box = document.getElementById("result");
+  box.style.display = "block";
+
+  if (!date) {
+    box.innerHTML = "No pude interpretar la fecha.";
+    return;
+  }
+
+  box.innerHTML = "Fecha detectada: <b>" + date.toLocaleString() + "</b>";
+};
+
+/* ================================
+   GENERAR ICS
+   ================================ */
+document.getElementById("icsBtn").onclick = () => {
+  const txt = document.getElementById("input").value;
+  const date = parseSpanishDate(txt);
+
+  if (!date) return alert("Sin fecha válida.");
+
+  const end = new Date(date.getTime() + 60 * 60 * 1000);
+  const ics =
+`BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+DTSTART:${formatICSDate(date)}
+DTEND:${formatICSDate(end)}
+SUMMARY:Evento
+END:VEVENT
+END:VCALENDAR`;
+
+  const blob = new Blob([ics], { type: "text/calendar" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "evento.ics";
+  a.click();
+};
+
+/* ================================
+   ABRIR OUTLOOK
+   ================================ */
+document.getElementById("outlookBtn").onclick = () =>
+  window.open("https://outlook.office.com/calendar/view/day");
+
+
+/* ================================
+   🎤 DICTADO REAL PARA iPHONE
+   ================================ */
+document.getElementById("dictBtn").onclick = () => {
+  const textarea = document.getElementById("input");
+  const float = document.getElementById("dict-float");
+
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+  if (!isIOS) {
+    alert("El dictado real está disponible solo en iPhone.");
+    return;
+  }
+
+  // 1. Enfocar el textarea → abre el teclado
+  textarea.focus();
+
+  // 2. Mostrar mensaje flotante
+  float.style.display = "block";
+
+  // 3. Observar cambios en el textarea (lo que dicta el usuario)
+  const observer = new MutationObserver(() => {
+    if (textarea.value.trim().length > 0) {
+      float.style.display = "none";
+    }
+  });
+
+  observer.observe(textarea, { characterData: true, childList: true, subtree: true });
+
+  // 4. Cuando el usuario termine de dictar → procesar automáticamente
+  textarea.addEventListener("blur", () => {
+    float.style.display = "none";
+  });
+};
+
+/* ================================
+   SERVICE WORKER
+   ================================ */
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js")
+    .catch(err => console.log("SW error:", err));
+}
+</script>
+
+</body>
+</html>
