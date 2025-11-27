@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>GM Calendar</title>
+  <meta name="description" content="Mini PWA para agendar eventos rápido en Outlook/Teams.">
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0078d4">
+
+  <!-- iPhone -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon.png">
+
+  <style>
+    :root{--blue:#0078d4}
+    body{font-family:system-ui, -apple-system, Arial; background:#f3f6fb; margin:0; padding:18px}
+    .card{max-width:640px;margin:18px auto;background:white;border-radius:12px;padding:18px;box-shadow:0 6px 18px rgba(0,0,0,.08)}
+    h1{color:var(--blue);font-size:20px;margin:0 0 8px}
+    p.small{color:#555;margin:6px 0 14px}
+    textarea{width:100%;height:110px;padding:10px;border-radius:8px;border:1px solid #d6dbe6;font-size:16px}
+    .row{display:flex;gap:8px;margin-top:12px}
+    button{flex:1;padding:12px;border-radius:10px;border:0;background:var(--blue);color:white;font-weight:600}
+    .muted{font-size:13px;color:#666;margin-top:10px}
+    .result{margin-top:12px;padding:10px;background:#f7fbff;border-radius:8px;border:1px solid #e4f0fb}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>GM Calendar</h1>
+    <p class="small">Escribe o dicta: <b>"mañana 15:00 reunión equipo"</b> o <b>"26/11 9:30 proveedor"</b>.</p>
+
+    <textarea id="input" placeholder="Escribe o pega aquí..."></textarea>
+
+    <div class="row">
+      <button id="dictBtn">🎤 Dictar</button>
+      <button id="parseBtn">🔎 Procesar</button>
+    </div>
+
+    <div class="row">
+      <button id="outlookBtn">📧 Outlook Web</button>
+      <button id="icsBtn">⬇️ Descargar .ics</button>
+    </div>
+
+    <div id="msg" class="muted">Puedo implementar enlaces de Teams automáticos si lo deseas.</div>
+
+    <div id="result" class="result" style="display:none"></div>
+  </div>
+
+<script>
+/* Aquí va el mismo JS que ya tienes dentro del <script> del index original */
+/* No necesitas modificar nada. */
+</script>
+
+<!-- Registrar Service Worker -->
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("service-worker.js")
+      .catch(err => console.log("SW error:", err));
+  });
+}
+</script>
+
+</body>
+</html>
