@@ -31,3 +31,36 @@ self.addEventListener("fetch", evt => {
     caches.match(evt.request).then(resp => resp || fetch(evt.request))
   );
 });
+function normalizarHora(texto) {
+  if (!texto) return "";
+
+  // Eliminar espacios
+  texto = texto.replace(/\s+/g, "");
+
+  // Si viene con :
+  if (texto.includes(":")) {
+    let [h, m] = texto.split(":");
+    return h.padStart(2, "0") + ":" + (m || "00").padStart(2, "0");
+  }
+
+  // Si viene tipo 930 o 1530
+  if (texto.length === 3) {
+    return "0" + texto[0] + ":" + texto.slice(1);
+  }
+
+  if (texto.length === 4) {
+    return texto.slice(0, 2) + ":" + texto.slice(2);
+  }
+
+  // Si solo pone la hora (ej 9)
+  if (texto.length === 1 || texto.length === 2) {
+    return texto.padStart(2, "0") + ":00";
+  }
+
+  return "";
+}
+
+function generarTituloAutomatico(texto) {
+  if (!texto) return "Evento";
+  return texto.split(" ").slice(0, 4).join(" ");
+}
