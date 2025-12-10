@@ -65,88 +65,214 @@
 
 
 <script>
-/* =====================================
-   PARSER ORIGINAL
-   ===================================== */
-function parseSpanishDate(text) {
-  text = text.toLowerCase();
-  const now = new Date();
+/* --------------------------
+   PARSER MEJORADO (FECHA/HORA/TÍTULO)
+   -------------------------- */
 
-  function normalizarHora(match) {
-    if (!match) return null;
+function parseTimeToken(token) {
+  if (!token) return { h: 9, m: 0, pm: false }; // default 09:00
 
-    let h = match[1];
-    let m = match[2] || "00";
+  token = token.replace(/\s+/g, "").toLowerCase();
 
-    h = h.padStart(2, "0");
-    m = m.padStart(2, "0");
+  // Quitar posible "h" final (ej "9h")
+  token = token.replace(/h$/i, "");
 
-    return { h: parseInt(h), m: parseInt(m) };
+  // AM/PM detect
+  let pm = false;
+  if (token.endsWith("pm")) { pm = true; token = token.replace(/pm$/i, ""); }
+  if (token.endsWith("am")) { token = token.replace(/am$/i, ""); }
+
+  // Si contiene ":"
+  if (token.includes(":")) {
+    const [hs, ms] = token.split(":");
+    let h = parseInt(hs || "0");
+    let m = parseInt(ms || "0");
+    if (pm && h < 12) h += 12;
+    if (!pm && h === 12) { /* 12am -> 0 handled only if explicitly am */ }
+    return { h, m, pm };
   }
 
-  // MAÑANA con hora flexible
-  let match = text.match(/mañana\s+(\d{1,2})(?:[:\s]?(\d{2}))?/);
-  if (match) {
-    const hora = normalizarHora(match);
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, hora.h, hora.m);
+  // Si tipo "930" o "1530"
+  if (/^\d{3,4}$/.test(token)) {
+    if (token.length === 3) {
+      const h = parseInt(token.charAt(0));
+      const m = parseInt(token.slice(1));
+      return { h, m, pm };
+    } else {
+      const h = parseInt(token.slice(0, 2));
+      const m = parseInt(token.slice(2));
+      return { h, m, pm };
+    }
   }
 
-  // HOY con hora flexible
-  match = text.match(/hoy\s+(\d{1,2})(?:[:\s]?(\d{2}))?/);
-  if (match) {
-    const hora = normalizarHora(match);
-    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hora.h, hora.m);
+  // Si solo hora "9" o "12"
+  if (/^\d{1,2}$/.test(token)) {
+    let h = parseInt(token);
+    if (pm && h < 12) h += 12;
+    return { h, m: 0, pm };
   }
 
-  // FECHA COMPLETA con hora flexible (28/11 930 o 28/11 9:30)
-  match = text.match(/(\d{1,2})\/(\d{1,2})\s+(\d{1,2})(?:[:\s]?(\d{2}))?/);
-  if (match) {
-    const h = match[3];
-    const m = match[4] || "00";
-    return new Date(now.getFullYear(), match[2] - 1, match[1],
-      parseInt(h), parseInt(m));
-  }
-
-  return null;
+  // Si no reconocemos, default
+  return { h: 9, m: 0, pm };
 }
 
+function parseInputText(text) {
+  const original = text || "";
+  text = original.toLowerCase().trim();
 
-/* ================================
-   BOTÓN PROCESAR
-   ================================ */
+  const now = new Date();
+
+  // Patterns
+  const datePattern = /(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/; // dd/mm[/yyyy]
+  const mañanaHoyPattern = /(mañana|hoy)/;
+  // time tokens could be like "9", "09:30", "930", "9 30", "9:30pm"
+  const timePattern = /(\d{1,2}(?:[:\s]?\d{2})?(?:\s?(?:am|pm))?|\d{3,4}(?:am|pm)?)/i;
+
+  // 1) Buscar fecha dd/mm (con posible hora)
+  let matchDate = text.match(datePattern);
+  if (matchDate) {
+    const day = parseInt(matchDate[1], 10);
+    const month = parseInt(matchDate[2], 10) - 1;
+    let year = matchDate[3] ? parseInt(matchDate[3], 10) : now.getFullYear();
+    if (year < 100) year += 2000; // 23 -> 2023
+
+    // Buscar una hora cerca de la fecha (después de la fecha)
+    const afterDateText = text.slice(matchDate.index + matchDate[0].length);
+    const matchTime = afterDateText.match(timePattern);
+    let timeToken = matchTime ? matchTime[0] : null;
+    if (!timeToken) {
+      // también buscar tiempo antes de la fecha (ej "9:30 28/11")
+      const beforeDateText = text.slice(0, matchDate.index);
+      const matchTimeBefore = beforeDateText.match(timePattern);
+      timeToken = matchTimeBefore ? matchTimeBefore[0] : null;
+    }
+
+    const { h, m } = parseTimeToken(timeToken ? timeToken.replace(/\s+/g, "") : null);
+    const d = new Date(year, month, day, h, m);
+    const title = extractTitleFromText(text, [matchDate[0], timeToken]);
+    return { date: d, title };
+  }
+
+  // 2) Buscar "mañana" o "hoy" con hora
+  const matchHoyMan = text.match(/(mañana|hoy)/);
+  if (matchHoyMan) {
+    const when = matchHoyMan[1]; // 'mañana' o 'hoy'
+    // Buscar hora tras la palabra
+    const after = text.slice(matchHoyMan.index + when.length);
+    let matchTime = after.match(timePattern);
+    let timeToken = matchTime ? matchTime[0] : null;
+
+    // si no hay hora después, buscar antes
+    if (!timeToken) {
+      const before = text.slice(0, matchHoyMan.index);
+      const matchTimeBefore = before.match(timePattern);
+      timeToken = matchTimeBefore ? matchTimeBefore[0] : null;
+    }
+
+    const { h, m } = parseTimeToken(timeToken ? timeToken.replace(/\s+/g, "") : null);
+
+    const dayOffset = when === "mañana" ? 1 : 0;
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset, h, m);
+    const title = extractTitleFromText(text, [when, timeToken]);
+    return { date: d, title };
+  }
+
+  // 3) Buscar únicamente hora (ej "9:30 reunión")
+  const matchOnlyTime = text.match(timePattern);
+  if (matchOnlyTime) {
+    const timeToken = matchOnlyTime[0];
+    const { h, m } = parseTimeToken(timeToken.replace(/\s+/g, ""));
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+    const title = extractTitleFromText(text, [timeToken]);
+    return { date: d, title };
+  }
+
+  // No se pudo interpretar
+  return { date: null, title: null };
+}
+
+function extractTitleFromText(text, tokensToRemove) {
+  let t = text || "";
+  tokensToRemove = tokensToRemove || [];
+  // Normalizar
+  t = t.toLowerCase();
+
+  // Quitar tokens detectados (fechas, hoy, mañana, horas)
+  tokensToRemove.forEach(token => {
+    if (!token) return;
+    // escapar caracteres especiales para regex
+    const esc = token.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+    t = t.replace(new RegExp(esc, "g"), " ");
+  });
+
+  // Quitar palabras comunes que no aportan título
+  t = t.replace(/\b(hoy|mañana|a las|a las|a las|am|pm|hrs|horas)\b/g, " ");
+
+  // Quitar cualquier residual de formatos numéricos
+  t = t.replace(/\d{1,2}[:\s]?\d{2}/g, " ");
+  t = t.replace(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/g, " ");
+
+  // Limpiar espacios y acortar a 6 palabras
+  t = t.replace(/\s+/g, " ").trim();
+  if (!t) return "Evento";
+  return t.split(" ").slice(0, 6).join(" ");
+}
+
+/* --------------------------
+   ICS & UI HELPERS
+   -------------------------- */
+
+function formatICSDate(d) {
+  // Formato local simplificado YYYYMMDDTHHMM00
+  return (
+    d.getFullYear().toString() +
+    String(d.getMonth() + 1).padStart(2, "0") +
+    String(d.getDate()).padStart(2, "0") + "T" +
+    String(d.getHours()).padStart(2, "0") +
+    String(d.getMinutes()).padStart(2, "0") +
+    "00"
+  );
+}
+
+/* --------------------------
+   BOTONES: Procesar, ICS, Outlook
+   -------------------------- */
+
 document.getElementById("parseBtn").onclick = () => {
   const txt = document.getElementById("input").value;
-  const date = parseSpanishDate(txt);
+  const parsed = parseInputText(txt);
 
   const box = document.getElementById("result");
   box.style.display = "block";
 
-  if (!date) {
-    box.innerHTML = "No pude interpretar la fecha.";
+  if (!parsed.date) {
+    box.innerHTML = "No pude interpretar la fecha/hora. Prueba con 'mañana 9:30 reunión' o '28/11 9:30 proveedor'.";
     return;
   }
 
-  box.innerHTML = "Fecha detectada: <b>" + date.toLocaleString() + "</b>";
+  box.innerHTML = `
+    <strong>Fecha detectada:</strong> ${parsed.date.toLocaleString()}<br>
+    <strong>Título:</strong> ${parsed.title}
+  `;
 };
 
-/* ================================
-   BOTÓN ICS
-   ================================ */
 document.getElementById("icsBtn").onclick = () => {
   const txt = document.getElementById("input").value;
-  const date = parseSpanishDate(txt);
+  const parsed = parseInputText(txt);
 
-  if (!date) return alert("Sin fecha válida.");
+  if (!parsed.date) return alert("Sin fecha válida. Intenta 'mañana 930 reunión'.");
 
-  const end = new Date(date.getTime() + 60 * 60 * 1000);
+  const start = parsed.date;
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
 
+  const safeTitle = parsed.title.replace(/[\r\n]+/g, " ").replace(/,/g, " ");
   const ics =
 `BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
-DTSTART:${formatICSDate(date)}
+DTSTART:${formatICSDate(start)}
 DTEND:${formatICSDate(end)}
-SUMMARY:${extraerTitulo(txt)}
+SUMMARY:${safeTitle}
 END:VEVENT
 END:VCALENDAR`;
 
@@ -159,15 +285,12 @@ END:VCALENDAR`;
   a.click();
 };
 
-/* ================================
-   OUTLOOK
-   ================================ */
 document.getElementById("outlookBtn").onclick = () =>
   window.open("https://outlook.office.com/calendar/view/day");
 
-/* ================================
-   🎤 DICTADO PARA iPHONE (SEGURO)
-   ================================ */
+/* --------------------------
+   DICTADO iPhone (sin cambios)
+   -------------------------- */
 document.getElementById("dictBtn").onclick = () => {
   const textarea = document.getElementById("input");
   const float = document.getElementById("dict-float");
@@ -179,13 +302,9 @@ document.getElementById("dictBtn").onclick = () => {
     return;
   }
 
-  // Enfocar textarea (abre teclado)
   textarea.focus();
-
-  // Mostrar mensaje flotante
   float.style.display = "block";
 
-  // Si el usuario escribe/dicta algo → ocultar mensaje
   textarea.addEventListener("input", () => {
     if (textarea.value.trim().length > 0) {
       float.style.display = "none";
@@ -193,23 +312,13 @@ document.getElementById("dictBtn").onclick = () => {
   });
 };
 
-/* ================================
-   SERVICE WORKER
-   ================================ */
+/* --------------------------
+   SERVICE WORKER (registrar)
+   -------------------------- */
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("service-worker.js")
     .catch(err => console.log("SW error:", err));
 }
 </script>
 
-</body>
-</html>
 
-function extraerTitulo(text) {
-  return text
-    .replace(/mañana|hoy|\d{1,2}\/\d{1,2}|\d{1,2}[:\s]?\d{2}/g, "")
-    .trim()
-    .split(" ")
-    .slice(0, 5)
-    .join(" ") || "Evento";
-}
