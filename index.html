@@ -72,41 +72,44 @@ function parseSpanishDate(text) {
   text = text.toLowerCase();
   const now = new Date();
 
-  if (text.includes("mañana")) {
-    const match = text.match(/(\d{1,2}):(\d{2})/);
-    if (match) {
-      return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1,
-        parseInt(match[1]), parseInt(match[2]));
-    }
+  function normalizarHora(match) {
+    if (!match) return null;
+
+    let h = match[1];
+    let m = match[2] || "00";
+
+    h = h.padStart(2, "0");
+    m = m.padStart(2, "0");
+
+    return { h: parseInt(h), m: parseInt(m) };
   }
 
-  if (text.includes("hoy")) {
-    const match = text.match(/(\d{1,2}):(\d{2})/);
-    if (match) {
-      return new Date(now.getFullYear(), now.getMonth(), now.getDate(),
-        parseInt(match[1]), parseInt(match[2]));
-    }
+  // MAÑANA con hora flexible
+  let match = text.match(/mañana\s+(\d{1,2})(?:[:\s]?(\d{2}))?/);
+  if (match) {
+    const hora = normalizarHora(match);
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, hora.h, hora.m);
   }
 
-  const full = text.match(/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})/);
-  if (full) {
-    return new Date(now.getFullYear(), full[2] - 1, full[1],
-      full[3], full[4]);
+  // HOY con hora flexible
+  match = text.match(/hoy\s+(\d{1,2})(?:[:\s]?(\d{2}))?/);
+  if (match) {
+    const hora = normalizarHora(match);
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), hora.h, hora.m);
+  }
+
+  // FECHA COMPLETA con hora flexible (28/11 930 o 28/11 9:30)
+  match = text.match(/(\d{1,2})\/(\d{1,2})\s+(\d{1,2})(?:[:\s]?(\d{2}))?/);
+  if (match) {
+    const h = match[3];
+    const m = match[4] || "00";
+    return new Date(now.getFullYear(), match[2] - 1, match[1],
+      parseInt(h), parseInt(m));
   }
 
   return null;
 }
 
-function formatICSDate(d) {
-  return (
-    d.getFullYear().toString() +
-    String(d.getMonth() + 1).padStart(2, "0") +
-    String(d.getDate()).padStart(2, "0") + "T" +
-    String(d.getHours()).padStart(2, "0") +
-    String(d.getMinutes()).padStart(2, "0") +
-    "00"
-  );
-}
 
 /* ================================
    BOTÓN PROCESAR
@@ -143,7 +146,7 @@ VERSION:2.0
 BEGIN:VEVENT
 DTSTART:${formatICSDate(date)}
 DTEND:${formatICSDate(end)}
-SUMMARY:Evento
+SUMMARY:${extraerTitulo(txt)}
 END:VEVENT
 END:VCALENDAR`;
 
@@ -201,3 +204,12 @@ if ("serviceWorker" in navigator) {
 
 </body>
 </html>
+
+function extraerTitulo(text) {
+  return text
+    .replace(/mañana|hoy|\d{1,2}\/\d{1,2}|\d{1,2}[:\s]?\d{2}/g, "")
+    .trim()
+    .split(" ")
+    .slice(0, 5)
+    .join(" ") || "Evento";
+}
