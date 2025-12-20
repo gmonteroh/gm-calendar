@@ -1,4 +1,4 @@
-const CACHE_NAME = "gm-calendar-v2";
+const CACHE_NAME = "gm-calendar-v3";
 const FILES_TO_CACHE = [
   "./",
   "./index.html",
@@ -64,4 +64,5 @@ function generarTituloAutomatico(texto) {
   if (!texto) return "Evento";
   return texto.split(" ").slice(0, 4).join(" ");
 }
+
 
