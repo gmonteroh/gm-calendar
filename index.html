@@ -81,6 +81,16 @@ function formatICSDate(d){
          String(d.getMinutes()).padStart(2,"0")+"00";
 }
 
+// Formato Outlook Web compatible
+function formatOutlookDate(d){
+  const yyyy=d.getFullYear();
+  const mm=String(d.getMonth()+1).padStart(2,"0");
+  const dd=String(d.getDate()).padStart(2,"0");
+  const hh=String(d.getHours()).padStart(2,"0");
+  const min=String(d.getMinutes()).padStart(2,"0");
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}:00`;
+}
+
 /* ===============================
    FLUJO SOLO VOZ
    =============================== */
@@ -93,11 +103,10 @@ const btn=document.getElementById("action-btn");
 overlay.addEventListener("click",()=>{
   overlay.style.display="none";
   textarea.removeAttribute("readonly");
-
   setTimeout(()=>{textarea.focus({preventScroll:true});},100);
   float.style.display="block";
 
-  // Observer para detectar dictado por voz
+  // Observer para dictado por voz
   const observer = new MutationObserver(()=>{
     const current=textarea.value.trim();
     if(!current) return;
@@ -112,7 +121,7 @@ overlay.addEventListener("click",()=>{
     btn.dataset.title=parsed.title;
     btn.dataset.date=parsed.date.toISOString();
 
-    observer.disconnect(); // desconectar una vez usado
+    observer.disconnect();
   });
 
   observer.observe(textarea, { characterData:true, childList:true, subtree:true });
@@ -140,8 +149,10 @@ END:VCALENDAR`;
   const a=document.createElement("a");
   a.href=url; a.download="evento.ics"; a.click();
 
-  // Abrir Outlook Web
-  const outlookUrl=`https://outlook.office.com/calendar/deeplink/compose?subject=${encodeURIComponent(title)}&startdt=${start.toISOString()}&enddt=${end.toISOString()}`;
+  // Abrir Outlook Web con fecha/hora correcta
+  const startStr=formatOutlookDate(start);
+  const endStr=formatOutlookDate(end);
+  const outlookUrl=`https://outlook.office.com/calendar/deeplink/compose?subject=${encodeURIComponent(title)}&startdt=${startStr}&enddt=${endStr}`;
   window.open(outlookUrl,"_blank");
 
   btn.style.display="none";
@@ -155,6 +166,7 @@ if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worke
 
 </body>
 </html>
+
 
 
 
