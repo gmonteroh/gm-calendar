@@ -93,23 +93,29 @@ const btn=document.getElementById("action-btn");
 overlay.addEventListener("click",()=>{
   overlay.style.display="none";
   textarea.removeAttribute("readonly");
+
   setTimeout(()=>{textarea.focus({preventScroll:true});},100);
   float.style.display="block";
-});
 
-// Mostrar botón en cuanto hay texto dictado
-textarea.addEventListener("input",()=>{
-  const current=textarea.value.trim();
-  if(!current) return;
-  float.style.display="none";
-  const parsed=parseInput(current);
-  box.style.display="block";
-  box.innerHTML=`<strong>Evento:</strong> ${parsed.title}<br>
-                 <strong>Fecha:</strong> ${parsed.date.toLocaleString()}`;
+  // Observer para detectar dictado por voz
+  const observer = new MutationObserver(()=>{
+    const current=textarea.value.trim();
+    if(!current) return;
 
-  btn.style.display="block";
-  btn.dataset.title=parsed.title;
-  btn.dataset.date=parsed.date.toISOString();
+    float.style.display="none";
+    const parsed=parseInput(current);
+    box.style.display="block";
+    box.innerHTML=`<strong>Evento:</strong> ${parsed.title}<br>
+                   <strong>Fecha:</strong> ${parsed.date.toLocaleString()}`;
+
+    btn.style.display="block";
+    btn.dataset.title=parsed.title;
+    btn.dataset.date=parsed.date.toISOString();
+
+    observer.disconnect(); // desconectar una vez usado
+  });
+
+  observer.observe(textarea, { characterData:true, childList:true, subtree:true });
 });
 
 /* ===============================
@@ -149,6 +155,7 @@ if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worke
 
 </body>
 </html>
+
 
 
 
