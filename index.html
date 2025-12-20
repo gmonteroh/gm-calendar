@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>GM Calendar</title>
-  <meta name="description" content="Mini PWA para agendar eventos por voz.">
+  <meta name="description" content="Mini PWA para crear eventos por voz">
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
@@ -32,9 +32,9 @@
     }
     textarea {
       width: 100%;
-      height: 90px;
-      font-size: 16px;
-      padding: 10px;
+      height: 100px;
+      font-size: 18px;
+      padding: 12px;
       border-radius: 8px;
       border: 1px solid #ccc;
     }
@@ -44,7 +44,26 @@
       margin-top: 12px;
       border-radius: 8px;
       display: none;
+      font-size: 16px;
     }
+
+    /* Overlay inicial */
+    #tap-overlay {
+      position: fixed;
+      inset: 0;
+      background: #0078d4;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      font-weight: bold;
+      z-index: 99999;
+      text-align: center;
+      padding: 20px;
+    }
+
+    /* Mensaje flotante */
     #dict-float {
       position: fixed;
       bottom: 20px;
@@ -57,137 +76,139 @@
       font-size: 15px;
       display: none;
       z-index: 9999;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
     }
   </style>
 </head>
 
 <body>
-  <div class="card">
-    <h2>GM Calendar</h2>
-    <p>Habla algo como: <b>“mañana 930 reunión proveedor”</b></p>
 
-    <textarea id="input" placeholder="Habla ahora…" readonly></textarea>
+<div id="tap-overlay">
+  Toca la pantalla para hablar 🎤
+</div>
 
-    <div id="result" class="result"></div>
-  </div>
+<div class="card">
+  <h2>GM Calendar</h2>
+  <p>Habla naturalmente, por ejemplo:<br>
+     <b>“mañana 930 reunión proveedor”</b></p>
 
-  <div id="dict-float">🎤 Dictando… usa el micrófono del teclado</div>
+  <textarea id="input" placeholder="Habla ahora…" readonly></textarea>
+
+  <div id="result" class="result"></div>
+</div>
+
+<div id="dict-float">Dictando… usa el micrófono del teclado</div>
 
 <script>
-/* =============================
+/* ===============================
    PARSER FECHA / HORA / TÍTULO
-   ============================= */
+   =============================== */
 
 function parseTime(token) {
   if (!token) return { h: 9, m: 0 };
-
   token = token.replace(/\s+/g, "").toLowerCase();
-  let pm = token.includes("pm");
-  token = token.replace(/am|pm|h/g, "");
 
   if (token.includes(":")) {
-    let [h, m] = token.split(":");
-    h = parseInt(h); m = parseInt(m || "0");
-    if (pm && h < 12) h += 12;
-    return { h, m };
+    const [h, m] = token.split(":");
+    return { h: parseInt(h), m: parseInt(m || 0) };
   }
 
-  if (/^\d{3}$/.test(token))
+  if (/^\d{3}$/.test(token)) {
     return { h: parseInt(token[0]), m: parseInt(token.slice(1)) };
+  }
 
-  if (/^\d{4}$/.test(token))
+  if (/^\d{4}$/.test(token)) {
     return { h: parseInt(token.slice(0,2)), m: parseInt(token.slice(2)) };
+  }
 
-  if (/^\d{1,2}$/.test(token))
+  if (/^\d{1,2}$/.test(token)) {
     return { h: parseInt(token), m: 0 };
+  }
 
   return { h: 9, m: 0 };
 }
 
-function extractTitle(text) {
-  return text
-    .replace(/\b(hoy|mañana)\b/g, "")
-    .replace(/\d{1,2}[:\s]?\d{0,2}/g, "")
-    .replace(/\d{1,2}\/\d{1,2}/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .slice(0, 6)
-    .join(" ") || "Evento";
-}
-
 function parseInput(text) {
-  text = text.toLowerCase();
   const now = new Date();
+  text = text.toLowerCase();
 
-  let date = new Date(now);
-  if (text.includes("mañana")) date.setDate(date.getDate() + 1);
+  let dayOffset = 0;
+  if (text.includes("mañana")) dayOffset = 1;
 
   const dateMatch = text.match(/(\d{1,2})\/(\d{1,2})/);
+  let day = now.getDate();
+  let month = now.getMonth();
+  let year = now.getFullYear();
+
   if (dateMatch) {
-    date.setDate(parseInt(dateMatch[1]));
-    date.setMonth(parseInt(dateMatch[2]) - 1);
+    day = parseInt(dateMatch[1]);
+    month = parseInt(dateMatch[2]) - 1;
   }
 
-  const timeMatch = text.match(/(\d{1,2}[:\s]?\d{0,2}|\d{3,4})/);
+  const timeMatch = text.match(/\d{1,2}[:\s]?\d{0,2}/);
   const { h, m } = parseTime(timeMatch ? timeMatch[0] : null);
-  date.setHours(h, m, 0, 0);
 
-  return {
-    date,
-    title: extractTitle(text)
-  };
+  const date = new Date(year, month, day + dayOffset, h, m);
+
+  let title = text
+    .replace(/mañana|hoy|\d{1,2}\/\d{1,2}|\d{1,2}[:\s]?\d{0,2}/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!title) title = "Evento";
+
+  return { date, title };
 }
 
-/* =============================
-   INIT – SOLO VOZ (iOS)
-   ============================= */
+/* ===============================
+   FLUJO SOLO VOZ (iOS)
+   =============================== */
 
+const overlay = document.getElementById("tap-overlay");
+const textarea = document.getElementById("input");
+const float = document.getElementById("dict-float");
+const box = document.getElementById("result");
+
+overlay.addEventListener("click", () => {
+  overlay.style.display = "none";
+  textarea.removeAttribute("readonly");
+  textarea.focus();
+  float.style.display = "block";
+});
+
+let lastValue = "";
+let stableCount = 0;
+
+textarea.addEventListener("input", () => {
+  const current = textarea.value.trim();
+  if (!current) return;
+
+  if (current === lastValue) stableCount++;
+  else stableCount = 0;
+
+  lastValue = current;
+
+  if (stableCount >= 3) {
+    float.style.display = "none";
+    const parsed = parseInput(current);
+    box.style.display = "block";
+    box.innerHTML = `
+      <strong>Evento:</strong> ${parsed.title}<br>
+      <strong>Fecha:</strong> ${parsed.date.toLocaleString()}
+    `;
+  }
+});
+
+/* ===============================
+   SERVICE WORKER
+   =============================== */
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("service-worker.js");
 }
-
-window.addEventListener("load", () => {
-  const textarea = document.getElementById("input");
-  const float = document.getElementById("dict-float");
-  const result = document.getElementById("result");
-
-  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  if (!isIOS) {
-    result.style.display = "block";
-    result.innerHTML = "Esta app funciona con dictado por voz en iPhone.";
-    return;
-  }
-
-  textarea.focus();
-  float.style.display = "block";
-
-  let last = "";
-  let stable = 0;
-
-  textarea.addEventListener("input", () => {
-    const val = textarea.value.trim();
-    if (!val) return;
-
-    if (val === last) stable++;
-    else stable = 0;
-
-    last = val;
-
-    if (stable >= 3) {
-      float.style.display = "none";
-      const parsed = parseInput(val);
-
-      result.style.display = "block";
-      result.innerHTML = `
-        <strong>Evento:</strong> ${parsed.title}<br>
-        <strong>Fecha:</strong> ${parsed.date.toLocaleString()}
-      `;
-    }
-  });
-});
 </script>
+
 </body>
 </html>
+
 
 
