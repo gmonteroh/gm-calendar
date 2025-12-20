@@ -40,7 +40,7 @@
 /* ===============================
    PARSER FECHA / HORA / TÍTULO
    =============================== */
-function parseTime(token) {
+function parseTime(token){
   if(!token) return {h:9,m:0};
   token=token.replace(/\s+/g,"").toLowerCase();
   if(token.includes(":")){const [h,m]=token.split(":");return {h:parseInt(h),m:parseInt(m||0)}}
@@ -76,50 +76,55 @@ function formatICSDate(d){
          String(d.getMinutes()).padStart(2,"0")+"00";
 }
 
-function formatOutlookDate(d){
-  const yyyy=d.getFullYear();
-  const mm=String(d.getMonth()+1).padStart(2,"0");
-  const dd=String(d.getDate()).padStart(2,"0");
-  const hh=String(d.getHours()).padStart(2,"0");
-  const min=String(d.getMinutes()).padStart(2,"0");
-  return `${yyyy}-${mm}-${dd}T${hh}:${min}:00`;
+/* ===============================
+   FORMATO OUTLOOK
+   =============================== */
+function toOutlookISOString(d){
+  const tzOffset = -d.getTimezoneOffset(); // en minutos
+  const sign = tzOffset>=0?"~":"-";
+  const pad=n=>String(Math.floor(Math.abs(n))).padStart(2,"0");
+  const hours=pad(tzOffset/60);
+  const minutes=pad(tzOffset%60);
+  return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+"T"+
+         pad(d.getHours())+":"+pad(d.getMinutes())+":00"+sign+hours+":"+minutes;
 }
 
 /* ===============================
-   FLUJO VOZ AUTOMÁTICO + BOTÓN
+   FLUJO SOLO VOZ
    =============================== */
 const textarea=document.getElementById("input");
 const float=document.getElementById("dict-float");
 const box=document.getElementById("result");
 const btn=document.getElementById("action-btn");
 
+// Abrir teclado automáticamente al cargar
 window.addEventListener("load",()=>{
   textarea.removeAttribute("readonly");
-  textarea.focus({preventScroll:true});
+  textarea.focus();
   float.style.display="block";
+});
 
-  let lastValue=""; let stableCount=0;
+let lastValue="";let stableCount=0;
 
-  const observer = () => {
-    const current=textarea.value.trim();
-    if(!current) return;
-    if(current===lastValue) stableCount++; else stableCount=0;
-    lastValue=current;
-    if(stableCount>=3){
-      float.style.display="none";
-      const parsed=parseInput(current);
-      box.style.display="block";
-      box.innerHTML=`<strong>Evento:</strong> ${parsed.title}<br>
-                     <strong>Fecha:</strong> ${parsed.date.toLocaleString()}`;
+textarea.addEventListener("input",()=>{
+  const current=textarea.value.trim();
+  if(!current) return;
+  if(current===lastValue) stableCount++; else stableCount=0;
+  lastValue=current;
+  if(stableCount>=3){
+    float.style.display="none";
+    const parsed=parseInput(current);
+    box.style.display="block";
+    box.innerHTML=`<strong>Evento:</strong> ${parsed.title}<br>
+                   <strong>Fecha:</strong> ${parsed.date.toLocaleString()}`;
 
-      // Mostrar botón
-      btn.style.display="block";
-      btn.dataset.title=parsed.title;
-      btn.dataset.date=parsed.date.toISOString();
-    }
-  };
+    // Mostrar botón para crear evento
+    btn.style.display="block";
 
-  setInterval(observer,500);
+    // Guardar datos para usar en click
+    btn.dataset.title=parsed.title;
+    btn.dataset.date=parsed.date.toISOString();
+  }
 });
 
 /* ===============================
@@ -144,12 +149,11 @@ END:VCALENDAR`;
   const a=document.createElement("a");
   a.href=url; a.download="evento.ics"; a.click();
 
-  // Abrir Outlook Web con fecha/hora correcta
-  const startStr=formatOutlookDate(start);
-  const endStr=formatOutlookDate(end);
-  const outlookUrl=`https://outlook.office.com/calendar/deeplink/compose?subject=${encodeURIComponent(title)}&startdt=${startStr}&enddt=${endStr}`;
+  // Abrir Outlook Web con fecha y hora correctas
+  const outlookUrl=`https://outlook.office.com/calendar/deeplink/compose?subject=${encodeURIComponent(title)}&startdt=${toOutlookISOString(start)}&enddt=${toOutlookISOString(end)}`;
   window.open(outlookUrl,"_blank");
 
+  // Ocultar botón
   btn.style.display="none";
 });
 
