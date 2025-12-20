@@ -29,7 +29,137 @@
   Toca la pantalla para hablar 🎤
 </div>
 
-<div
+<div class="card">
+  <h2>GM Calendar</h2>
+  <p>Habla naturalmente, por ejemplo:<br>
+     <b>“mañana 930 reunión proveedor”</b></p>
+
+  <textarea id="input" placeholder="Habla ahora…" readonly></textarea>
+  <button id="action-btn">📅 Crear evento</button>
+  <div id="result" class="result"></div>
+</div>
+
+<div id="dict-float">Dictando… usa el micrófono del teclado</div>
+
+<script>
+/* ===============================
+   PARSER FECHA / HORA / TÍTULO
+   =============================== */
+function parseTime(token) {
+  if(!token) return {h:9,m:0};
+  token=token.replace(/\s+/g,"").toLowerCase();
+  if(token.includes(":")){const [h,m]=token.split(":");return {h:parseInt(h),m:parseInt(m||0)}}
+  if(/^\d{3}$/.test(token)){return {h:parseInt(token[0]),m:parseInt(token.slice(1))}}
+  if(/^\d{4}$/.test(token)){return {h:parseInt(token.slice(0,2)),m:parseInt(token.slice(2))}}
+  if(/^\d{1,2}$/.test(token)){return {h:parseInt(token),m:0}}
+  return {h:9,m:0};
+}
+
+function parseInput(text){
+  const now=new Date();
+  text=text.toLowerCase();
+  let dayOffset=0;if(text.includes("mañana")) dayOffset=1;
+  const dateMatch=text.match(/(\d{1,2})\/(\d{1,2})/);
+  let day=now.getDate();let month=now.getMonth();let year=now.getFullYear();
+  if(dateMatch){day=parseInt(dateMatch[1]);month=parseInt(dateMatch[2])-1;}
+  const timeMatch=text.match(/\d{1,2}[:\s]?\d{0,2}/);
+  const {h,m}=parseTime(timeMatch?timeMatch[0]:null);
+  const date=new Date(year,month,day+dayOffset,h,m);
+  let title=text.replace(/mañana|hoy|\d{1,2}\/\d{1,2}|\d{1,2}[:\s]?\d{0,2}/g,"").replace(/\s+/g," ").trim();
+  if(!title) title="Evento";
+  return {date,title};
+}
+
+/* ===============================
+   FORMATO ICS
+   =============================== */
+function formatICSDate(d){
+  return d.getFullYear().toString()+
+         String(d.getMonth()+1).padStart(2,"0")+
+         String(d.getDate()).padStart(2,"0")+"T"+
+         String(d.getHours()).padStart(2,"0")+
+         String(d.getMinutes()).padStart(2,"0")+"00";
+}
+
+/* ===============================
+   FLUJO SOLO VOZ
+   =============================== */
+const overlay=document.getElementById("tap-overlay");
+const textarea=document.getElementById("input");
+const float=document.getElementById("dict-float");
+const box=document.getElementById("result");
+const btn=document.getElementById("action-btn");
+
+overlay.addEventListener("click",()=>{
+  overlay.style.display="none";
+  textarea.removeAttribute("readonly");
+
+  // Enfocar con retardo para que iOS abra teclado
+  setTimeout(()=>{
+    textarea.focus({preventScroll:true});
+  },100);
+
+  float.style.display="block";
+});
+
+let lastValue="";let stableCount=0;
+
+textarea.addEventListener("input",()=>{
+  const current=textarea.value.trim();
+  if(!current) return;
+  if(current===lastValue) stableCount++; else stableCount=0;
+  lastValue=current;
+  if(stableCount>=3){
+    float.style.display="none";
+    const parsed=parseInput(current);
+    box.style.display="block";
+    box.innerHTML=`<strong>Evento:</strong> ${parsed.title}<br>
+                   <strong>Fecha:</strong> ${parsed.date.toLocaleString()}`;
+
+    btn.style.display="block";
+    btn.dataset.title=parsed.title;
+    btn.dataset.date=parsed.date.toISOString();
+  }
+});
+
+/* ===============================
+   BOTÓN ÚNICO: Crear evento
+   =============================== */
+btn.addEventListener("click",()=>{
+  const title=btn.dataset.title;
+  const start=new Date(btn.dataset.date);
+  const end=new Date(start.getTime()+60*60*1000);
+
+  // Crear ICS
+  const ics=`BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+DTSTART:${formatICSDate(start)}
+DTEND:${formatICSDate(end)}
+SUMMARY:${title}
+END:VEVENT
+END:VCALENDAR`;
+  const blob=new Blob([ics],{type:"text/calendar"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download="evento.ics"; a.click();
+
+  // Abrir Outlook web
+  const outlookUrl=`https://outlook.office.com/calendar/deeplink/compose?subject=${encodeURIComponent(title)}&startdt=${start.toISOString()}&enddt=${end.toISOString()}`;
+  window.open(outlookUrl,"_blank");
+
+  btn.style.display="none";
+});
+
+/* ===============================
+   SERVICE WORKER
+   =============================== */
+if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worker.js");}
+</script>
+
+</body>
+</html>
+
 
 
 
