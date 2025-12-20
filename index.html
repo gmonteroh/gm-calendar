@@ -93,35 +93,27 @@ const btn=document.getElementById("action-btn");
 overlay.addEventListener("click",()=>{
   overlay.style.display="none";
   textarea.removeAttribute("readonly");
-  textarea.focus();
+  setTimeout(()=>{textarea.focus({preventScroll:true});},100);
   float.style.display="block";
 });
 
-let lastValue="";let stableCount=0;
-
+// Mostrar botón en cuanto hay texto dictado
 textarea.addEventListener("input",()=>{
   const current=textarea.value.trim();
   if(!current) return;
-  if(current===lastValue) stableCount++; else stableCount=0;
-  lastValue=current;
-  if(stableCount>=3){
-    float.style.display="none";
-    const parsed=parseInput(current);
-    box.style.display="block";
-    box.innerHTML=`<strong>Evento:</strong> ${parsed.title}<br>
-                   <strong>Fecha:</strong> ${parsed.date.toLocaleString()}`;
+  float.style.display="none";
+  const parsed=parseInput(current);
+  box.style.display="block";
+  box.innerHTML=`<strong>Evento:</strong> ${parsed.title}<br>
+                 <strong>Fecha:</strong> ${parsed.date.toLocaleString()}`;
 
-    // Mostrar botón para crear evento
-    btn.style.display="block";
-
-    // Guardar datos para usar en click
-    btn.dataset.title=parsed.title;
-    btn.dataset.date=parsed.date.toISOString();
-  }
+  btn.style.display="block";
+  btn.dataset.title=parsed.title;
+  btn.dataset.date=parsed.date.toISOString();
 });
 
 /* ===============================
-   BOTÓN ÚNICO: Crear evento
+   BOTÓN ÚNICO: Crear evento (.ics + Outlook Web)
    =============================== */
 btn.addEventListener("click",()=>{
   const title=btn.dataset.title;
@@ -142,11 +134,10 @@ END:VCALENDAR`;
   const a=document.createElement("a");
   a.href=url; a.download="evento.ics"; a.click();
 
-  // Abrir Outlook web
+  // Abrir Outlook Web
   const outlookUrl=`https://outlook.office.com/calendar/deeplink/compose?subject=${encodeURIComponent(title)}&startdt=${start.toISOString()}&enddt=${end.toISOString()}`;
   window.open(outlookUrl,"_blank");
 
-  // Ocultar botón
   btn.style.display="none";
 });
 
@@ -158,6 +149,7 @@ if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worke
 
 </body>
 </html>
+
 
 
 
