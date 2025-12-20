@@ -93,12 +93,7 @@ const btn=document.getElementById("action-btn");
 overlay.addEventListener("click",()=>{
   overlay.style.display="none";
   textarea.removeAttribute("readonly");
-
-  // Enfocar con retardo para que iOS abra teclado
-  setTimeout(()=>{
-    textarea.focus({preventScroll:true});
-  },100);
-
+  textarea.focus();
   float.style.display="block";
 });
 
@@ -116,7 +111,10 @@ textarea.addEventListener("input",()=>{
     box.innerHTML=`<strong>Evento:</strong> ${parsed.title}<br>
                    <strong>Fecha:</strong> ${parsed.date.toLocaleString()}`;
 
+    // Mostrar botón para crear evento
     btn.style.display="block";
+
+    // Guardar datos para usar en click
     btn.dataset.title=parsed.title;
     btn.dataset.date=parsed.date.toISOString();
   }
@@ -148,6 +146,7 @@ END:VCALENDAR`;
   const outlookUrl=`https://outlook.office.com/calendar/deeplink/compose?subject=${encodeURIComponent(title)}&startdt=${start.toISOString()}&enddt=${end.toISOString()}`;
   window.open(outlookUrl,"_blank");
 
+  // Ocultar botón
   btn.style.display="none";
 });
 
@@ -159,6 +158,7 @@ if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worke
 
 </body>
 </html>
+
 
 
 
