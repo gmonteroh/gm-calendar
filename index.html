@@ -86,14 +86,13 @@ function formatOutlookDate(d){
 }
 
 /* ===============================
-   FLUJO SOLO VOZ AUTOMÁTICO
+   FLUJO VOZ AUTOMÁTICO + BOTÓN
    =============================== */
 const textarea=document.getElementById("input");
 const float=document.getElementById("dict-float");
 const box=document.getElementById("result");
 const btn=document.getElementById("action-btn");
 
-// Abrir teclado y mostrar mensaje de dictado al cargar
 window.addEventListener("load",()=>{
   textarea.removeAttribute("readonly");
   textarea.focus({preventScroll:true});
@@ -113,14 +112,14 @@ window.addEventListener("load",()=>{
       box.innerHTML=`<strong>Evento:</strong> ${parsed.title}<br>
                      <strong>Fecha:</strong> ${parsed.date.toLocaleString()}`;
 
+      // Mostrar botón
       btn.style.display="block";
       btn.dataset.title=parsed.title;
       btn.dataset.date=parsed.date.toISOString();
     }
   };
 
-  // Revisar cada 500ms si dictado estable
-  const interval=setInterval(observer,500);
+  setInterval(observer,500);
 });
 
 /* ===============================
@@ -162,6 +161,7 @@ if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worke
 
 </body>
 </html>
+
 
 
 
