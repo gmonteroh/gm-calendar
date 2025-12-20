@@ -4,26 +4,47 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>GM Calendar</title>
-  <meta name="description" content="Mini PWA para agendar eventos rápido en Outlook/Teams.">
+  <meta name="description" content="Mini PWA para agendar eventos por voz.">
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0078d4">
 
-  <!-- iPhone -->
+  <!-- iOS -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="icon.png">
 
   <style>
-    body { font-family: Arial; background: #f3f6fb; margin: 0; padding: 16px; }
-    .card { max-width: 600px; margin: auto; background: white; padding: 16px; border-radius: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.1); }
-    textarea { width: 100%; height: 100px; margin-top: 10px; font-size: 16px; padding: 10px; border-radius: 8px; border: 1px solid #ccc; }
-    button { padding: 12px; margin-top: 10px; width: 48%; border: none; border-radius: 8px; background: #0078d4; color: white; font-weight: bold; }
-    .row { display: flex; justify-content: space-between; gap: 4%; }
-    .result { background: #eef5ff; padding: 12px; margin-top: 10px; border-radius: 8px; display: none; }
-
-    /* Mensaje flotante */
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f6fb;
+      margin: 0;
+      padding: 16px;
+    }
+    .card {
+      max-width: 600px;
+      margin: auto;
+      background: white;
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.1);
+    }
+    textarea {
+      width: 100%;
+      height: 90px;
+      font-size: 16px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+    .result {
+      background: #eef5ff;
+      padding: 12px;
+      margin-top: 12px;
+      border-radius: 8px;
+      display: none;
+    }
     #dict-float {
       position: fixed;
       bottom: 20px;
@@ -36,7 +57,6 @@
       font-size: 15px;
       display: none;
       z-index: 9999;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
     }
   </style>
 </head>
@@ -44,281 +64,130 @@
 <body>
   <div class="card">
     <h2>GM Calendar</h2>
-    <p>Escribe algo como: <b>"mañana 15:00 reunión"</b> o <b>"28/11 9:30 proveedor"</b>.</p>
+    <p>Habla algo como: <b>“mañana 930 reunión proveedor”</b></p>
 
-    <textarea id="input" placeholder="Escribe aquí..."></textarea>
-
-    <div class="row">
-      <button id="dictBtn">🎤 Dictar</button>
-      <button id="parseBtn">🔎 Procesar</button>
-    </div>
-
-    <div class="row">
-      <button id="outlookBtn">📧 Outlook</button>
-      <button id="icsBtn">⬇️ .ics</button>
-    </div>
+    <textarea id="input" placeholder="Habla ahora…" readonly></textarea>
 
     <div id="result" class="result"></div>
   </div>
 
-  <div id="dict-float">Dictando… toca el micrófono del teclado</div>
-
+  <div id="dict-float">🎤 Dictando… usa el micrófono del teclado</div>
 
 <script>
-/* --------------------------
-   PARSER MEJORADO (FECHA/HORA/TÍTULO)
-   -------------------------- */
+/* =============================
+   PARSER FECHA / HORA / TÍTULO
+   ============================= */
 
-function parseTimeToken(token) {
-  if (!token) return { h: 9, m: 0, pm: false }; // default 09:00
+function parseTime(token) {
+  if (!token) return { h: 9, m: 0 };
 
   token = token.replace(/\s+/g, "").toLowerCase();
+  let pm = token.includes("pm");
+  token = token.replace(/am|pm|h/g, "");
 
-  // Quitar posible "h" final (ej "9h")
-  token = token.replace(/h$/i, "");
-
-  // AM/PM detect
-  let pm = false;
-  if (token.endsWith("pm")) { pm = true; token = token.replace(/pm$/i, ""); }
-  if (token.endsWith("am")) { token = token.replace(/am$/i, ""); }
-
-  // Si contiene ":"
   if (token.includes(":")) {
-    const [hs, ms] = token.split(":");
-    let h = parseInt(hs || "0");
-    let m = parseInt(ms || "0");
+    let [h, m] = token.split(":");
+    h = parseInt(h); m = parseInt(m || "0");
     if (pm && h < 12) h += 12;
-    if (!pm && h === 12) { /* 12am -> 0 handled only if explicitly am */ }
-    return { h, m, pm };
+    return { h, m };
   }
 
-  // Si tipo "930" o "1530"
-  if (/^\d{3,4}$/.test(token)) {
-    if (token.length === 3) {
-      const h = parseInt(token.charAt(0));
-      const m = parseInt(token.slice(1));
-      return { h, m, pm };
-    } else {
-      const h = parseInt(token.slice(0, 2));
-      const m = parseInt(token.slice(2));
-      return { h, m, pm };
-    }
-  }
+  if (/^\d{3}$/.test(token))
+    return { h: parseInt(token[0]), m: parseInt(token.slice(1)) };
 
-  // Si solo hora "9" o "12"
-  if (/^\d{1,2}$/.test(token)) {
-    let h = parseInt(token);
-    if (pm && h < 12) h += 12;
-    return { h, m: 0, pm };
-  }
+  if (/^\d{4}$/.test(token))
+    return { h: parseInt(token.slice(0,2)), m: parseInt(token.slice(2)) };
 
-  // Si no reconocemos, default
-  return { h: 9, m: 0, pm };
+  if (/^\d{1,2}$/.test(token))
+    return { h: parseInt(token), m: 0 };
+
+  return { h: 9, m: 0 };
 }
 
-function parseInputText(text) {
-  const original = text || "";
-  text = original.toLowerCase().trim();
+function extractTitle(text) {
+  return text
+    .replace(/\b(hoy|mañana)\b/g, "")
+    .replace(/\d{1,2}[:\s]?\d{0,2}/g, "")
+    .replace(/\d{1,2}\/\d{1,2}/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .slice(0, 6)
+    .join(" ") || "Evento";
+}
 
+function parseInput(text) {
+  text = text.toLowerCase();
   const now = new Date();
 
-  // Patterns
-  const datePattern = /(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/; // dd/mm[/yyyy]
-  const mañanaHoyPattern = /(mañana|hoy)/;
-  // time tokens could be like "9", "09:30", "930", "9 30", "9:30pm"
-  const timePattern = /(\d{1,2}(?:[:\s]?\d{2})?(?:\s?(?:am|pm))?|\d{3,4}(?:am|pm)?)/i;
+  let date = new Date(now);
+  if (text.includes("mañana")) date.setDate(date.getDate() + 1);
 
-  // 1) Buscar fecha dd/mm (con posible hora)
-  let matchDate = text.match(datePattern);
-  if (matchDate) {
-    const day = parseInt(matchDate[1], 10);
-    const month = parseInt(matchDate[2], 10) - 1;
-    let year = matchDate[3] ? parseInt(matchDate[3], 10) : now.getFullYear();
-    if (year < 100) year += 2000; // 23 -> 2023
-
-    // Buscar una hora cerca de la fecha (después de la fecha)
-    const afterDateText = text.slice(matchDate.index + matchDate[0].length);
-    const matchTime = afterDateText.match(timePattern);
-    let timeToken = matchTime ? matchTime[0] : null;
-    if (!timeToken) {
-      // también buscar tiempo antes de la fecha (ej "9:30 28/11")
-      const beforeDateText = text.slice(0, matchDate.index);
-      const matchTimeBefore = beforeDateText.match(timePattern);
-      timeToken = matchTimeBefore ? matchTimeBefore[0] : null;
-    }
-
-    const { h, m } = parseTimeToken(timeToken ? timeToken.replace(/\s+/g, "") : null);
-    const d = new Date(year, month, day, h, m);
-    const title = extractTitleFromText(text, [matchDate[0], timeToken]);
-    return { date: d, title };
+  const dateMatch = text.match(/(\d{1,2})\/(\d{1,2})/);
+  if (dateMatch) {
+    date.setDate(parseInt(dateMatch[1]));
+    date.setMonth(parseInt(dateMatch[2]) - 1);
   }
 
-  // 2) Buscar "mañana" o "hoy" con hora
-  const matchHoyMan = text.match(/(mañana|hoy)/);
-  if (matchHoyMan) {
-    const when = matchHoyMan[1]; // 'mañana' o 'hoy'
-    // Buscar hora tras la palabra
-    const after = text.slice(matchHoyMan.index + when.length);
-    let matchTime = after.match(timePattern);
-    let timeToken = matchTime ? matchTime[0] : null;
+  const timeMatch = text.match(/(\d{1,2}[:\s]?\d{0,2}|\d{3,4})/);
+  const { h, m } = parseTime(timeMatch ? timeMatch[0] : null);
+  date.setHours(h, m, 0, 0);
 
-    // si no hay hora después, buscar antes
-    if (!timeToken) {
-      const before = text.slice(0, matchHoyMan.index);
-      const matchTimeBefore = before.match(timePattern);
-      timeToken = matchTimeBefore ? matchTimeBefore[0] : null;
-    }
-
-    const { h, m } = parseTimeToken(timeToken ? timeToken.replace(/\s+/g, "") : null);
-
-    const dayOffset = when === "mañana" ? 1 : 0;
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + dayOffset, h, m);
-    const title = extractTitleFromText(text, [when, timeToken]);
-    return { date: d, title };
-  }
-
-  // 3) Buscar únicamente hora (ej "9:30 reunión")
-  const matchOnlyTime = text.match(timePattern);
-  if (matchOnlyTime) {
-    const timeToken = matchOnlyTime[0];
-    const { h, m } = parseTimeToken(timeToken.replace(/\s+/g, ""));
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
-    const title = extractTitleFromText(text, [timeToken]);
-    return { date: d, title };
-  }
-
-  // No se pudo interpretar
-  return { date: null, title: null };
+  return {
+    date,
+    title: extractTitle(text)
+  };
 }
 
-function extractTitleFromText(text, tokensToRemove) {
-  let t = text || "";
-  tokensToRemove = tokensToRemove || [];
-  // Normalizar
-  t = t.toLowerCase();
+/* =============================
+   INIT – SOLO VOZ (iOS)
+   ============================= */
 
-  // Quitar tokens detectados (fechas, hoy, mañana, horas)
-  tokensToRemove.forEach(token => {
-    if (!token) return;
-    // escapar caracteres especiales para regex
-    const esc = token.replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
-    t = t.replace(new RegExp(esc, "g"), " ");
-  });
-
-  // Quitar palabras comunes que no aportan título
-  t = t.replace(/\b(hoy|mañana|a las|a las|a las|am|pm|hrs|horas)\b/g, " ");
-
-  // Quitar cualquier residual de formatos numéricos
-  t = t.replace(/\d{1,2}[:\s]?\d{2}/g, " ");
-  t = t.replace(/\d{1,2}\/\d{1,2}(?:\/\d{2,4})?/g, " ");
-
-  // Limpiar espacios y acortar a 6 palabras
-  t = t.replace(/\s+/g, " ").trim();
-  if (!t) return "Evento";
-  return t.split(" ").slice(0, 6).join(" ");
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
 }
 
-/* --------------------------
-   ICS & UI HELPERS
-   -------------------------- */
-
-function formatICSDate(d) {
-  // Formato local simplificado YYYYMMDDTHHMM00
-  return (
-    d.getFullYear().toString() +
-    String(d.getMonth() + 1).padStart(2, "0") +
-    String(d.getDate()).padStart(2, "0") + "T" +
-    String(d.getHours()).padStart(2, "0") +
-    String(d.getMinutes()).padStart(2, "0") +
-    "00"
-  );
-}
-
-/* --------------------------
-   BOTONES: Procesar, ICS, Outlook
-   -------------------------- */
-
-document.getElementById("parseBtn").onclick = () => {
-  const txt = document.getElementById("input").value;
-  const parsed = parseInputText(txt);
-
-  const box = document.getElementById("result");
-  box.style.display = "block";
-
-  if (!parsed.date) {
-    box.innerHTML = "No pude interpretar la fecha/hora. Prueba con 'mañana 9:30 reunión' o '28/11 9:30 proveedor'.";
-    return;
-  }
-
-  box.innerHTML = `
-    <strong>Fecha detectada:</strong> ${parsed.date.toLocaleString()}<br>
-    <strong>Título:</strong> ${parsed.title}
-  `;
-};
-
-document.getElementById("icsBtn").onclick = () => {
-  const txt = document.getElementById("input").value;
-  const parsed = parseInputText(txt);
-
-  if (!parsed.date) return alert("Sin fecha válida. Intenta 'mañana 930 reunión'.");
-
-  const start = parsed.date;
-  const end = new Date(start.getTime() + 60 * 60 * 1000);
-
-  const safeTitle = parsed.title.replace(/[\r\n]+/g, " ").replace(/,/g, " ");
-  const ics =
-`BEGIN:VCALENDAR
-VERSION:2.0
-BEGIN:VEVENT
-DTSTART:${formatICSDate(start)}
-DTEND:${formatICSDate(end)}
-SUMMARY:${safeTitle}
-END:VEVENT
-END:VCALENDAR`;
-
-  const blob = new Blob([ics], { type: "text/calendar" });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "evento.ics";
-  a.click();
-};
-
-document.getElementById("outlookBtn").onclick = () =>
-  window.open("https://outlook.office.com/calendar/view/day");
-
-/* --------------------------
-   DICTADO iPhone (sin cambios)
-   -------------------------- */
-document.getElementById("dictBtn").onclick = () => {
+window.addEventListener("load", () => {
   const textarea = document.getElementById("input");
   const float = document.getElementById("dict-float");
+  const result = document.getElementById("result");
 
   const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-
   if (!isIOS) {
-    alert("Dictado disponible solo en iPhone.");
+    result.style.display = "block";
+    result.innerHTML = "Esta app funciona con dictado por voz en iPhone.";
     return;
   }
 
   textarea.focus();
   float.style.display = "block";
 
+  let last = "";
+  let stable = 0;
+
   textarea.addEventListener("input", () => {
-    if (textarea.value.trim().length > 0) {
+    const val = textarea.value.trim();
+    if (!val) return;
+
+    if (val === last) stable++;
+    else stable = 0;
+
+    last = val;
+
+    if (stable >= 3) {
       float.style.display = "none";
+      const parsed = parseInput(val);
+
+      result.style.display = "block";
+      result.innerHTML = `
+        <strong>Evento:</strong> ${parsed.title}<br>
+        <strong>Fecha:</strong> ${parsed.date.toLocaleString()}
+      `;
     }
   });
-};
-
-/* --------------------------
-   SERVICE WORKER (registrar)
-   -------------------------- */
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("service-worker.js")
-    .catch(err => console.log("SW error:", err));
-}
+});
 </script>
+</body>
+</html>
 
 
