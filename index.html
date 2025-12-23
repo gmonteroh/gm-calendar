@@ -17,8 +17,8 @@
   .card { max-width:600px; margin:auto; background:white; padding:16px; border-radius:12px; box-shadow:0 4px 14px rgba(0,0,0,0.1); }
   textarea { width:100%; height:100px; font-size:18px; padding:12px; border-radius:8px; border:1px solid #ccc; }
   .result { background:#eef5ff; padding:12px; margin-top:12px; border-radius:8px; display:none; font-size:16px; }
-  #dict-float { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#0078d4; color:white; padding:12px 16px; border-radius:10px; font-size:15px; display:none; z-index:9999; box-shadow:0 4px 10px rgba(0,0,0,0.3); }
-  #action-btn { display:none; margin-top:12px; width:100%; padding:12px; border:none; border-radius:8px; background:#0078d4; color:white; font-size:18px; font-weight:bold; }
+  #action-btn { display:none; margin-top:12px; width:100%; padding:14px; border:none; border-radius:8px; background:#0078d4; color:white; font-size:18px; font-weight:bold; }
+  #dict-float { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#0078d4; color:white; padding:12px 16px; border-radius:10px; font-size:15px; display:none; z-index:9999; }
 </style>
 </head>
 
@@ -29,7 +29,7 @@
   <p>Habla naturalmente, por ejemplo:<br>
      <b>“mañana 930 reunión proveedor”</b></p>
 
-  <textarea id="input" placeholder="Habla ahora…" readonly></textarea>
+  <textarea id="input" placeholder="Habla ahora…"></textarea>
   <button id="action-btn">📅 Crear evento</button>
   <div id="result" class="result"></div>
 </div>
@@ -43,25 +43,36 @@
 function parseTime(token){
   if(!token) return {h:9,m:0};
   token=token.replace(/\s+/g,"").toLowerCase();
-  if(token.includes(":")){const [h,m]=token.split(":");return {h:parseInt(h),m:parseInt(m||0)}}
-  if(/^\d{3}$/.test(token)){return {h:parseInt(token[0]),m:parseInt(token.slice(1))}}
-  if(/^\d{4}$/.test(token)){return {h:parseInt(token.slice(0,2)),m:parseInt(token.slice(2))}}
-  if(/^\d{1,2}$/.test(token)){return {h:parseInt(token),m:0}}
+  if(token.includes(":")){const [h,m]=token.split(":");return {h:+h,m:+(m||0)}}
+  if(/^\d{3}$/.test(token)) return {h:+token[0],m:+token.slice(1)};
+  if(/^\d{4}$/.test(token)) return {h:+token.slice(0,2),m:+token.slice(2)};
+  if(/^\d{1,2}$/.test(token)) return {h:+token,m:0};
   return {h:9,m:0};
 }
 
 function parseInput(text){
   const now=new Date();
   text=text.toLowerCase();
-  let dayOffset=0;if(text.includes("mañana")) dayOffset=1;
-  const dateMatch=text.match(/(\d{1,2})\/(\d{1,2})/);
-  let day=now.getDate();let month=now.getMonth();let year=now.getFullYear();
-  if(dateMatch){day=parseInt(dateMatch[1]);month=parseInt(dateMatch[2])-1;}
-  const timeMatch=text.match(/\d{1,2}[:\s]?\d{0,2}/);
-  const {h,m}=parseTime(timeMatch?timeMatch[0]:null);
-  const date=new Date(year,month,day+dayOffset,h,m);
-  let title=text.replace(/mañana|hoy|\d{1,2}\/\d{1,2}|\d{1,2}[:\s]?\d{0,2}/g,"").replace(/\s+/g," ").trim();
+
+  let offset=0;
+  if(text.includes("mañana")) offset=1;
+
+  let d=now.getDate(), m=now.getMonth(), y=now.getFullYear();
+  const dm=text.match(/(\d{1,2})\/(\d{1,2})/);
+  if(dm){d=+dm[1]; m=+dm[2]-1;}
+
+  const tm=text.match(/\d{1,2}[:\s]?\d{0,2}/);
+  const {h,m:mi}=parseTime(tm?tm[0]:null);
+
+  const date=new Date(y,m,d+offset,h,mi);
+
+  let title=text
+    .replace(/mañana|hoy|\d{1,2}\/\d{1,2}|\d{1,2}[:\s]?\d{0,2}/g,"")
+    .replace(/\s+/g," ")
+    .trim();
+
   if(!title) title="Evento";
+
   return {date,title};
 }
 
@@ -69,73 +80,57 @@ function parseInput(text){
    FORMATO ICS
    =============================== */
 function formatICSDate(d){
-  return d.getFullYear().toString()+
-         String(d.getMonth()+1).padStart(2,"0")+
-         String(d.getDate()).padStart(2,"0")+"T"+
-         String(d.getHours()).padStart(2,"0")+
-         String(d.getMinutes()).padStart(2,"0")+"00";
+  return d.getFullYear()+
+    String(d.getMonth()+1).padStart(2,"0")+
+    String(d.getDate()).padStart(2,"0")+"T"+
+    String(d.getHours()).padStart(2,"0")+
+    String(d.getMinutes()).padStart(2,"0")+"00";
 }
 
 /* ===============================
-   FORMATO OUTLOOK
-   =============================== */
-function toOutlookISOString(d){
-  const tzOffset = -d.getTimezoneOffset(); // en minutos
-  const sign = tzOffset>=0?"~":"-";
-  const pad=n=>String(Math.floor(Math.abs(n))).padStart(2,"0");
-  const hours=pad(tzOffset/60);
-  const minutes=pad(tzOffset%60);
-  return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+"T"+
-         pad(d.getHours())+":"+pad(d.getMinutes())+":00"+sign+hours+":"+minutes;
-}
-
-/* ===============================
-   FLUJO SOLO VOZ
+   DICTADO
    =============================== */
 const textarea=document.getElementById("input");
-const float=document.getElementById("dict-float");
-const box=document.getElementById("result");
 const btn=document.getElementById("action-btn");
+const box=document.getElementById("result");
+const float=document.getElementById("dict-float");
 
-// Abrir teclado automáticamente al cargar
 window.addEventListener("load",()=>{
-  textarea.removeAttribute("readonly");
   textarea.focus();
   float.style.display="block";
 });
 
-let lastValue="";let stableCount=0;
+let last="",stable=0;
 
 textarea.addEventListener("input",()=>{
-  const current=textarea.value.trim();
-  if(!current) return;
-  if(current===lastValue) stableCount++; else stableCount=0;
-  lastValue=current;
-  if(stableCount>=3){
+  const val=textarea.value.trim();
+  if(!val) return;
+
+  if(val===last) stable++; else stable=0;
+  last=val;
+
+  if(stable>=3){
     float.style.display="none";
-    const parsed=parseInput(current);
+    const parsed=parseInput(val);
+
     box.style.display="block";
     box.innerHTML=`<strong>Evento:</strong> ${parsed.title}<br>
                    <strong>Fecha:</strong> ${parsed.date.toLocaleString()}`;
 
-    // Mostrar botón para crear evento
     btn.style.display="block";
-
-    // Guardar datos para usar en click
     btn.dataset.title=parsed.title;
     btn.dataset.date=parsed.date.toISOString();
   }
 });
 
 /* ===============================
-   BOTÓN ÚNICO: Crear evento (.ics + Outlook Web)
+   BOTÓN → ABRE OUTLOOK APP (ICS)
    =============================== */
 btn.addEventListener("click",()=>{
   const title=btn.dataset.title;
   const start=new Date(btn.dataset.date);
   const end=new Date(start.getTime()+60*60*1000);
 
-  // Crear ICS
   const ics=`BEGIN:VCALENDAR
 VERSION:2.0
 BEGIN:VEVENT
@@ -144,27 +139,31 @@ DTEND:${formatICSDate(end)}
 SUMMARY:${title}
 END:VEVENT
 END:VCALENDAR`;
+
   const blob=new Blob([ics],{type:"text/calendar"});
   const url=URL.createObjectURL(blob);
+
   const a=document.createElement("a");
-  a.href=url; a.download="evento.ics"; a.click();
+  a.href=url;
+  a.target="_blank";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 
-  // Abrir Outlook Web con fecha y hora correctas
-  const outlookUrl=`https://outlook.office.com/calendar/deeplink/compose?subject=${encodeURIComponent(title)}&startdt=${toOutlookISOString(start)}&enddt=${toOutlookISOString(end)}`;
-  window.open(outlookUrl,"_blank");
-
-  // Ocultar botón
   btn.style.display="none";
 });
 
 /* ===============================
    SERVICE WORKER
    =============================== */
-if("serviceWorker" in navigator){navigator.serviceWorker.register("service-worker.js");}
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("service-worker.js");
+}
 </script>
 
 </body>
 </html>
+
 
 
 
